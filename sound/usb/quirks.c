@@ -1509,17 +1509,36 @@ void snd_usb_audioformat_attributes_quirk(struct snd_usb_audio *chip,
 	}
 }
 
-bool snd_usb_support_autosuspend_quirk(struct usb_device *dev)
+/*
+ * registration quirk:
+ * the registration is skipped if a device matches with the given ID,
+ * unless the interface reaches to the defined one.  This is for delaying
+ * the registration until the last known interface, so that the card and
+ * devices appear at the same time.
+ */
+
+struct registration_quirk {
+	unsigned int usb_id;	/* composed via USB_ID() */
+	unsigned int interface;	/* the interface to trigger register */
+};
+
+#define REG_QUIRK_ENTRY(vendor, product, iface) \
+	{ .usb_id = USB_ID(vendor, product), .interface = (iface) }
+
+static const struct registration_quirk registration_quirks[] = {
+	REG_QUIRK_ENTRY(0x0951, 0x16d8, 2),	/* Kingston HyperX AMP */
+	{ 0 }					/* terminator */
+};
+
+/* return true if skipping registration */
+bool snd_usb_registration_quirk(struct snd_usb_audio *chip, int iface)
 {
-	struct snd_usb_audio *chip = dev_get_drvdata(&dev->dev);
+	const struct registration_quirk *q;
 
-	if (!chip)
-		return false;
+	for (q = registration_quirks; q->usb_id; q++)
+		if (chip->usb_id == q->usb_id)
+			return iface != q->interface;
 
-	switch (chip->usb_id) {
-	case USB_ID(0x1963, 0x0020):
-		dev_info(&dev->dev, "snd device not support autosuspend");
-		return false;
-	}
-	return true;
+	/* Register as normal */
+	return false;
 }
