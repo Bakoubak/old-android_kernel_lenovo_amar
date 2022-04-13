@@ -1497,35 +1497,17 @@ static void android_work(struct work_struct *data)
 	}
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
-	if (status[0]) {
-		kobject_uevent_env(&android_device->kobj,
-					KOBJ_CHANGE, connected);
-		pr_info("%s: sent uevent %s\n", __func__, connected[0]);
-		uevent_sent = true;
-	}
-
-	if (status[1]) {
-		kobject_uevent_env(&android_device->kobj,
-					KOBJ_CHANGE, configured);
-		pr_info("%s: sent uevent %s\n", __func__, configured[0]);
-		uevent_sent = true;
-
-		if (IS_ENABLED(CONFIG_MTPROF))
-			bootprof_log("USB configured");
-
-	}
-
-	if (status[2]) {
-		kobject_uevent_env(&android_device->kobj,
-					KOBJ_CHANGE, disconnected);
-		pr_info("%s: sent uevent %s\n", __func__, disconnected[0]);
-		uevent_sent = true;
-	}
-
-	if (!uevent_sent) {
-		pr_info("%s: did not send uevent (%d %d %p)\n", __func__,
-			gi->connected, gi->sw_connected, cdev->config);
-	}
+	kfree(otg_desc[0]);
+	otg_desc[0] = NULL;
+	purge_configs_funcs(gi);
+	composite_dev_cleanup(cdev);
+	usb_ep_autoconfig_reset(cdev->gadget);
+	spin_lock_irqsave(&gi->spinlock, flags);
+	cdev->gadget = NULL;
+	cdev->deactivations = 0;
+	gadget->deactivated = false;
+	set_gadget_data(gadget, NULL);
+	spin_unlock_irqrestore(&gi->spinlock, flags);
 }
 #else
 static int configfs_composite_setup(struct usb_gadget *gadget,
