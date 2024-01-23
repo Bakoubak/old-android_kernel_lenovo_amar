@@ -1452,6 +1452,7 @@ static inline bool sect_empty(const Elf_Shdr *sect)
 
 struct module_sect_attr {
 	struct bin_attribute battr;
+	char *name;
 	unsigned long address;
 };
 
