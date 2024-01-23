@@ -66,7 +66,7 @@
 #include <linux/ftrace.h>
 #include <linux/lockdep.h>
 #include <linux/nmi.h>
-// #include <linux/psi.h>
+#include <linux/psi.h>
 #include <linux/khugepaged.h>
 
 #include <asm/sections.h>
