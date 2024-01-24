@@ -4,15 +4,9 @@
  *
  * Do not include this file directly. Use fscrypt.h instead!
  */
- 
-/*
-#ifndef _LINUX_FSCRYPT_H
-#error "Incorrect include of linux/fscrypt_supp.h!"
-#endif
-*/
 
-#ifndef _LINUX_FSCRYPT_SUPP_H
-#define _LINUX_FSCRYPT_SUPP_H
+#ifndef _LINUX_FSCRYPT_EXT_H
+#define _LINUX_FSCRYPT_EXT_H
 
 #include <linux/mm.h>
 #include <linux/slab.h>
@@ -236,4 +230,4 @@ extern const char *fscrypt_get_symlink(struct inode *inode, const void *caddr,
 				       struct delayed_call *done);
 int fscrypt_symlink_getattr(const struct path *path, struct kstat *stat);
 
-#endif	/* _LINUX_FSCRYPT_SUPP_H */
+#endif	/* _LINUX_FSCRYPT_EXT_H */

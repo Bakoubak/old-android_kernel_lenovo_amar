@@ -5,7 +5,7 @@
  */
 
 #include <linux/key.h>
-
+#include <linux/fscrypt.h>
 #include "fscrypt_private.h"
 
 /**

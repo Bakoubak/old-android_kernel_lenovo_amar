@@ -59,7 +59,7 @@ mkdir $cpio_dir
 pushd $srctree > /dev/null
 for f in $dir_list;
 	do find "$f" -name "*.h";
-done | $cpio --quiet -pd $cpio_dir
+$cpio --quiet -pd $cpio_dir
 
 popd > /dev/null
 

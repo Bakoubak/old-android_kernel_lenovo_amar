@@ -983,10 +983,6 @@ static inline void hid_map_usage(struct hid_input *hidinput,
 		__u8 type, unsigned int c)
 {
 	struct input_dev *input = hidinput->input;
-<<<<<<< HEAD
-
-=======
->>>>>>> a47b8511d905 (HID: core: Sanitize event code and type when mapping input)
 	unsigned long *bmap = NULL;
 	unsigned int limit = 0;
 

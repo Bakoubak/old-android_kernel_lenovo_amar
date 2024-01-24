@@ -351,14 +351,14 @@ int fscrypt_fname_disk_to_usr(const struct inode *inode,
 					   oname->name);
 		return 0;
 	}
-	digested_name.hash = hash;
-	digested_name.minor_hash = minor_hash;
-	memcpy(digested_name.digest,
+	fscrypt_digested_name.hash = hash;
+	fscrypt_digested_name.minor_hash = minor_hash;
+	memcpy(fscrypt_digested_name.digest,
 	       FSCRYPT_FNAME_DIGEST(iname->name, iname->len),
 	       FSCRYPT_FNAME_DIGEST_SIZE);
 	oname->name[0] = '_';
-	oname->len = 1 + digest_encode((const char *)&digested_name,
-				       sizeof(digested_name), oname->name + 1);
+	oname->len = 1 + digest_encode((const char *)&fscrypt_digested_name,
+				       sizeof(fscrypt_digested_name), oname->name + 1);
 	return 0;
 }
 EXPORT_SYMBOL(fscrypt_fname_disk_to_usr);
