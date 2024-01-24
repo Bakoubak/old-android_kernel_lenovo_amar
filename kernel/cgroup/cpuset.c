@@ -831,6 +831,7 @@ done:
 	return ndoms;
 }
 
+/*
 static void cpuset_sched_change_begin(void)
 {
 	cpus_read_lock();
@@ -842,6 +843,7 @@ static void cpuset_sched_change_end(void)
 	mutex_unlock(&cpuset_mutex);
 	cpus_read_unlock();
 }
+*/
 
 
 /*
