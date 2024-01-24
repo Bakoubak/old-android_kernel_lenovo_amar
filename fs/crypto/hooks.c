@@ -50,6 +50,10 @@ int fscrypt_file_open(struct inode *inode, struct file *filp)
 }
 EXPORT_SYMBOL_GPL(fscrypt_file_open);
 
+const struct dentry_operations fscrypt_d_ops = {
+	.d_revalidate = fscrypt_d_revalidate,
+};
+
 int __fscrypt_prepare_link(struct inode *inode, struct inode *dir,
 			   struct dentry *dentry)
 {

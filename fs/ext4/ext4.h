@@ -2353,6 +2353,7 @@ extern void ext4_fname_setup_ci_filename(struct inode *dir,
 #endif
 
 #ifdef CONFIG_FS_ENCRYPTION
+/*
 static inline void ext4_fname_from_fscrypt_name(struct ext4_filename *dst,
 						const struct fscrypt_name *src)
 {
@@ -2364,6 +2365,7 @@ static inline void ext4_fname_from_fscrypt_name(struct ext4_filename *dst,
 	dst->hinfo.minor_hash = src->minor_hash;
 	dst->crypto_buf = src->crypto_buf;
 }
+*/
 
 #ifdef CONFIG_EXT4_FS_ENCRYPTION
 static inline void ext4_fname_from_fscrypt_name(struct ext4_filename *dst,
