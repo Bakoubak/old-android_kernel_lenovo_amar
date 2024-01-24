@@ -13,7 +13,6 @@
 
 #include <linux/namei.h>
 #include <linux/scatterlist.h>
-#include <linux/fscrypt_supp.h>
 #include <crypto/hash.h>
 #include <crypto/sha.h>
 #include <crypto/skcipher.h>
