@@ -3394,3 +3394,4 @@ extern const struct iomap_ops ext4_iomap_ops;
 #define EFSCORRUPTED	EUCLEAN		/* Filesystem is corrupted */
 
 #endif	/* _EXT4_H */
+#endif
