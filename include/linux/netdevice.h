@@ -163,38 +163,31 @@ static inline bool dev_xmit_complete(int rc)
  *	(unsigned long) so they can be read and written atomically.
  */
 
-#define NET_DEV_STAT(FIELD)			\
-	union {					\
-		unsigned long FIELD;		\
-		atomic_long_t __##FIELD;	\
-	}
-
 struct net_device_stats {
-	NET_DEV_STAT(rx_packets);
-	NET_DEV_STAT(tx_packets);
-	NET_DEV_STAT(rx_bytes);
-	NET_DEV_STAT(tx_bytes);
-	NET_DEV_STAT(rx_errors);
-	NET_DEV_STAT(tx_errors);
-	NET_DEV_STAT(rx_dropped);
-	NET_DEV_STAT(tx_dropped);
-	NET_DEV_STAT(multicast);
-	NET_DEV_STAT(collisions);
-	NET_DEV_STAT(rx_length_errors);
-	NET_DEV_STAT(rx_over_errors);
-	NET_DEV_STAT(rx_crc_errors);
-	NET_DEV_STAT(rx_frame_errors);
-	NET_DEV_STAT(rx_fifo_errors);
-	NET_DEV_STAT(rx_missed_errors);
-	NET_DEV_STAT(tx_aborted_errors);
-	NET_DEV_STAT(tx_carrier_errors);
-	NET_DEV_STAT(tx_fifo_errors);
-	NET_DEV_STAT(tx_heartbeat_errors);
-	NET_DEV_STAT(tx_window_errors);
-	NET_DEV_STAT(rx_compressed);
-	NET_DEV_STAT(tx_compressed);
+	unsigned long	rx_packets;
+	unsigned long	tx_packets;
+	unsigned long	rx_bytes;
+	unsigned long	tx_bytes;
+	unsigned long	rx_errors;
+	unsigned long	tx_errors;
+	unsigned long	rx_dropped;
+	unsigned long	tx_dropped;
+	unsigned long	multicast;
+	unsigned long	collisions;
+	unsigned long	rx_length_errors;
+	unsigned long	rx_over_errors;
+	unsigned long	rx_crc_errors;
+	unsigned long	rx_frame_errors;
+	unsigned long	rx_fifo_errors;
+	unsigned long	rx_missed_errors;
+	unsigned long	tx_aborted_errors;
+	unsigned long	tx_carrier_errors;
+	unsigned long	tx_fifo_errors;
+	unsigned long	tx_heartbeat_errors;
+	unsigned long	tx_window_errors;
+	unsigned long	rx_compressed;
+	unsigned long	tx_compressed;
 };
-#undef NET_DEV_STAT
 
 
 #include <linux/cache.h>
@@ -268,11 +261,9 @@ struct hh_cache {
  * relationship HH alignment <= LL alignment.
  */
 #define LL_RESERVED_SPACE(dev) \
-	((((dev)->hard_header_len + READ_ONCE((dev)->needed_headroom)) \
-	  & ~(HH_DATA_MOD - 1)) + HH_DATA_MOD)
+	((((dev)->hard_header_len+(dev)->needed_headroom)&~(HH_DATA_MOD - 1)) + HH_DATA_MOD)
 #define LL_RESERVED_SPACE_EXTRA(dev,extra) \
-	((((dev)->hard_header_len + READ_ONCE((dev)->needed_headroom) + (extra)) \
-	  & ~(HH_DATA_MOD - 1)) + HH_DATA_MOD)
+	((((dev)->hard_header_len+(dev)->needed_headroom+(extra))&~(HH_DATA_MOD - 1)) + HH_DATA_MOD)
 
 struct header_ops {
 	int	(*create) (struct sk_buff *skb, struct net_device *dev,
@@ -287,7 +278,6 @@ struct header_ops {
 
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
-	__be16	(*parse_protocol)(const struct sk_buff *skb);
 };
 
 /* These flag bits are private to the generic network queueing
@@ -716,11 +706,8 @@ static inline void rps_record_sock_flow(struct rps_sock_flow_table *table,
 		/* We only give a hint, preemption can change CPU under us */
 		val |= raw_smp_processor_id();
 
-		/* The following WRITE_ONCE() is paired with the READ_ONCE()
-		 * here, and another one in get_rps_cpu().
-		 */
-		if (READ_ONCE(table->ents[index]) != val)
-			WRITE_ONCE(table->ents[index], val);
+		if (table->ents[index] != val)
+			table->ents[index] = val;
 	}
 }
 
@@ -1695,6 +1682,7 @@ enum netdev_priv_flags {
  *	@tipc_ptr:	TIPC specific data
  *	@atalk_ptr:	AppleTalk link
  *	@ip_ptr:	IPv4 specific data
+ *	@dn_ptr:	DECnet specific data
  *	@ip6_ptr:	IPv6 specific data
  *	@ax25_ptr:	AX.25 specific data
  *	@ieee80211_ptr:	IEEE 802.11 specific data, assign before registering
@@ -1938,6 +1926,9 @@ struct net_device {
 	void 			*atalk_ptr;
 #endif
 	struct in_device __rcu	*ip_ptr;
+#if IS_ENABLED(CONFIG_DECNET)
+	struct dn_dev __rcu     *dn_ptr;
+#endif
 	struct inet6_dev __rcu	*ip6_ptr;
 #if IS_ENABLED(CONFIG_AX25)
 	void			*ax25_ptr;
@@ -2401,7 +2392,6 @@ struct packet_type {
 					      struct net_device *);
 	bool			(*id_match)(struct packet_type *ptype,
 					    struct sock *sk);
-	struct net		*af_packet_net;
 	void			*af_packet_priv;
 	struct list_head	list;
 
@@ -2682,6 +2672,14 @@ void netdev_freemem(struct net_device *dev);
 void synchronize_net(void);
 int init_dummy_netdev(struct net_device *dev);
 
+DECLARE_PER_CPU(int, xmit_recursion);
+#define XMIT_RECURSION_LIMIT	10
+
+static inline int dev_recursion_level(void)
+{
+	return this_cpu_read(xmit_recursion);
+}
+
 struct net_device *dev_get_by_index(struct net *net, int ifindex);
 struct net_device *__dev_get_by_index(struct net *net, int ifindex);
 struct net_device *dev_get_by_index_rcu(struct net *net, int ifindex);
@@ -2957,15 +2955,6 @@ static inline int dev_parse_header(const struct sk_buff *skb,
 	return dev->header_ops->parse(skb, haddr);
 }
 
-static inline __be16 dev_parse_header_protocol(const struct sk_buff *skb)
-{
-	const struct net_device *dev = skb->dev;
-
-	if (!dev->header_ops || !dev->header_ops->parse_protocol)
-		return 0;
-	return dev->header_ops->parse_protocol(skb);
-}
-
 /* ll_header must have at least hard_header_len allocated */
 static inline bool dev_validate_header(const struct net_device *dev,
 				       char *ll_header, int len)
@@ -3034,11 +3023,6 @@ struct softnet_data {
 #ifdef CONFIG_XFRM_OFFLOAD
 	struct sk_buff_head	xfrm_backlog;
 #endif
-	/* written and read only by owning cpu: */
-	struct {
-		u16 recursion;
-		u8  more;
-	} xmit;
 #ifdef CONFIG_RPS
 	/* input_queue_head should be written by cpu owning this struct,
 	 * and only read by other cpus. Worth using a cache line.
@@ -3073,28 +3057,6 @@ static inline void input_queue_tail_incr_save(struct softnet_data *sd,
 }
 
 DECLARE_PER_CPU_ALIGNED(struct softnet_data, softnet_data);
-
-static inline int dev_recursion_level(void)
-{
-	return this_cpu_read(softnet_data.xmit.recursion);
-}
-
-#define XMIT_RECURSION_LIMIT	8
-static inline bool dev_xmit_recursion(void)
-{
-	return unlikely(__this_cpu_read(softnet_data.xmit.recursion) >
-			XMIT_RECURSION_LIMIT);
-}
-
-static inline void dev_xmit_recursion_inc(void)
-{
-	__this_cpu_inc(softnet_data.xmit.recursion);
-}
-
-static inline void dev_xmit_recursion_dec(void)
-{
-	__this_cpu_dec(softnet_data.xmit.recursion);
-}
 
 void __netif_schedule(struct Qdisc *q);
 void netif_schedule_queue(struct netdev_queue *txq);
@@ -3660,10 +3622,6 @@ int netdev_rx_handler_register(struct net_device *dev,
 void netdev_rx_handler_unregister(struct net_device *dev);
 
 bool dev_valid_name(const char *name);
-static inline bool is_socket_ioctl_cmd(unsigned int cmd)
-{
-	return _IOC_TYPE(cmd) == SOCK_IOC_TYPE;
-}
 int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr,
 		bool *need_copyout);
 int dev_ifconf(struct net *net, struct ifconf *, int);
@@ -3718,7 +3676,7 @@ static __always_inline int ____dev_forward_skb(struct net_device *dev,
 		return NET_RX_DROP;
 	}
 
-	skb_scrub_packet(skb, !net_eq(dev_net(dev), dev_net(skb->dev)));
+	skb_scrub_packet(skb, true);
 	skb->priority = 0;
 	return 0;
 }
@@ -3739,8 +3697,7 @@ void netdev_run_todo(void);
  */
 static inline void dev_put(struct net_device *dev)
 {
-	if (dev)
-		this_cpu_dec(*dev->pcpu_refcnt);
+	this_cpu_dec(*dev->pcpu_refcnt);
 }
 
 /**
@@ -3751,8 +3708,7 @@ static inline void dev_put(struct net_device *dev)
  */
 static inline void dev_hold(struct net_device *dev)
 {
-	if (dev)
-		this_cpu_inc(*dev->pcpu_refcnt);
+	this_cpu_inc(*dev->pcpu_refcnt);
 }
 
 /* Carrier loss detection, dial on demand. The functions netif_carrier_on
@@ -3908,8 +3864,7 @@ static inline u32 netif_msg_init(int debug_value, int default_msg_enable_bits)
 static inline void __netif_tx_lock(struct netdev_queue *txq, int cpu)
 {
 	spin_lock(&txq->_xmit_lock);
-	/* Pairs with READ_ONCE() in __dev_queue_xmit() */
-	WRITE_ONCE(txq->xmit_lock_owner, cpu);
+	txq->xmit_lock_owner = cpu;
 }
 
 static inline bool __netif_tx_acquire(struct netdev_queue *txq)
@@ -3926,32 +3881,26 @@ static inline void __netif_tx_release(struct netdev_queue *txq)
 static inline void __netif_tx_lock_bh(struct netdev_queue *txq)
 {
 	spin_lock_bh(&txq->_xmit_lock);
-	/* Pairs with READ_ONCE() in __dev_queue_xmit() */
-	WRITE_ONCE(txq->xmit_lock_owner, smp_processor_id());
+	txq->xmit_lock_owner = smp_processor_id();
 }
 
 static inline bool __netif_tx_trylock(struct netdev_queue *txq)
 {
 	bool ok = spin_trylock(&txq->_xmit_lock);
-
-	if (likely(ok)) {
-		/* Pairs with READ_ONCE() in __dev_queue_xmit() */
-		WRITE_ONCE(txq->xmit_lock_owner, smp_processor_id());
-	}
+	if (likely(ok))
+		txq->xmit_lock_owner = smp_processor_id();
 	return ok;
 }
 
 static inline void __netif_tx_unlock(struct netdev_queue *txq)
 {
-	/* Pairs with READ_ONCE() in __dev_queue_xmit() */
-	WRITE_ONCE(txq->xmit_lock_owner, -1);
+	txq->xmit_lock_owner = -1;
 	spin_unlock(&txq->_xmit_lock);
 }
 
 static inline void __netif_tx_unlock_bh(struct netdev_queue *txq)
 {
-	/* Pairs with READ_ONCE() in __dev_queue_xmit() */
-	WRITE_ONCE(txq->xmit_lock_owner, -1);
+	txq->xmit_lock_owner = -1;
 	spin_unlock_bh(&txq->_xmit_lock);
 }
 
@@ -4055,7 +4004,6 @@ static inline void netif_tx_disable(struct net_device *dev)
 
 	local_bh_disable();
 	cpu = smp_processor_id();
-	spin_lock(&dev->tx_global_lock);
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		struct netdev_queue *txq = netdev_get_tx_queue(dev, i);
 
@@ -4063,7 +4011,6 @@ static inline void netif_tx_disable(struct net_device *dev)
 		netif_tx_stop_queue(txq);
 		__netif_tx_unlock(txq);
 	}
-	spin_unlock(&dev->tx_global_lock);
 	local_bh_enable();
 }
 
@@ -4143,24 +4090,6 @@ void __hw_addr_unsync_dev(struct netdev_hw_addr_list *list,
 void __hw_addr_init(struct netdev_hw_addr_list *list);
 
 /* Functions used for device addresses handling */
-static inline void
-__dev_addr_set(struct net_device *dev, const u8 *addr, size_t len)
-{
-	memcpy(dev->dev_addr, addr, len);
-}
-
-static inline void dev_addr_set(struct net_device *dev, const u8 *addr)
-{
-	__dev_addr_set(dev, addr, dev->addr_len);
-}
-
-static inline void
-dev_addr_mod(struct net_device *dev, unsigned int offset,
-	     const u8 *addr, size_t len)
-{
-	memcpy(&dev->dev_addr[offset], addr, len);
-}
-
 int dev_addr_add(struct net_device *dev, const unsigned char *addr,
 		 unsigned char addr_type);
 int dev_addr_del(struct net_device *dev, const unsigned char *addr,
@@ -4440,11 +4369,6 @@ static inline netdev_tx_t __netdev_start_xmit(const struct net_device_ops *ops,
 {
 	skb->xmit_more = more ? 1 : 0;
 	return ops->ndo_start_xmit(skb, dev);
-}
-
-static inline bool netdev_xmit_more(void)
-{
-	return __this_cpu_read(softnet_data.xmit.more);
 }
 
 static inline netdev_tx_t netdev_start_xmit(struct sk_buff *skb, struct net_device *dev,
@@ -4905,11 +4829,5 @@ do {								\
  */
 #define PTYPE_HASH_SIZE	(16)
 #define PTYPE_HASH_MASK	(PTYPE_HASH_SIZE - 1)
-
-/* Note: Avoid these macros in fast path, prefer per-cpu or per-queue counters. */
-#define DEV_STATS_INC(DEV, FIELD) atomic_long_inc(&(DEV)->stats.__##FIELD)
-#define DEV_STATS_ADD(DEV, FIELD, VAL) 	\
-		atomic_long_add((VAL), &(DEV)->stats.__##FIELD)
-#define DEV_STATS_READ(DEV, FIELD) atomic_long_read(&(DEV)->stats.__##FIELD)
 
 #endif	/* _LINUX_NETDEVICE_H */

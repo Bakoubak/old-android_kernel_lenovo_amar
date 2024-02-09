@@ -5,7 +5,7 @@
  */
 
 #include <linux/key.h>
-#include <linux/fscrypt.h>
+
 #include "fscrypt_private.h"
 
 /**
@@ -49,10 +49,6 @@ int fscrypt_file_open(struct inode *inode, struct file *filp)
 	return err;
 }
 EXPORT_SYMBOL_GPL(fscrypt_file_open);
-
-const struct dentry_operations fscrypt_d_ops = {
-	.d_revalidate = fscrypt_d_revalidate,
-};
 
 int __fscrypt_prepare_link(struct inode *inode, struct inode *dir,
 			   struct dentry *dentry)
@@ -117,13 +113,12 @@ int __fscrypt_prepare_lookup(struct inode *dir, struct dentry *dentry,
 	if (err && err != -ENOENT)
 		return err;
 
-	if (!fscrypt_has_encryption_key(dir)) {
+	if (fname->is_ciphertext_name) {
 		spin_lock(&dentry->d_lock);
 		dentry->d_flags |= DCACHE_ENCRYPTED_NAME;
 		spin_unlock(&dentry->d_lock);
-		d_set_d_op(dentry, &fscrypt_d_ops);
 	}
-	return 0;
+	return err;
 }
 EXPORT_SYMBOL_GPL(__fscrypt_prepare_lookup);
 

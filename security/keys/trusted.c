@@ -29,7 +29,7 @@
 #include <linux/capability.h>
 #include <linux/tpm.h>
 #include <linux/tpm_command.h>
-#include <stdarg.h>
+
 #include "trusted.h"
 
 static const char hmac_alg[] = "hmac(sha1)";
@@ -143,7 +143,7 @@ static int TSS_authhmac(unsigned char *digest, const unsigned char *key,
 	ret = crypto_shash_init(&sdesc->shash);
 	if (ret < 0)
 		goto out;
-	// va_start(argp, h3);
+	va_start(argp, h3);
 	for (;;) {
 		dlen = va_arg(argp, unsigned int);
 		if (dlen == 0)
@@ -796,7 +796,7 @@ static int getoptions(char *c, struct trusted_key_payload *pay,
 		case Opt_migratable:
 			if (*args[0].from == '0')
 				pay->migratable = 0;
-			else if (*args[0].from != '1')
+			else
 				return -EINVAL;
 			break;
 		case Opt_pcrlock:

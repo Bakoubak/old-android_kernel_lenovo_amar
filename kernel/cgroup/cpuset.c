@@ -831,7 +831,6 @@ done:
 	return ndoms;
 }
 
-/*
 static void cpuset_sched_change_begin(void)
 {
 	cpus_read_lock();
@@ -843,7 +842,6 @@ static void cpuset_sched_change_end(void)
 	mutex_unlock(&cpuset_mutex);
 	cpus_read_unlock();
 }
-*/
 
 
 /*
@@ -862,7 +860,6 @@ static void rebuild_sched_domains_cpuslocked(void)
 	cpumask_var_t *doms;
 	int ndoms;
 
-	lockdep_assert_cpus_held();
 	lockdep_assert_held(&cpuset_mutex);
 
 	/*
@@ -887,11 +884,9 @@ static void rebuild_sched_domains_cpuslocked(void)
 
 void rebuild_sched_domains(void)
 {
-	get_online_cpus();
-	mutex_lock(&cpuset_mutex);
+	cpuset_sched_change_begin();
 	rebuild_sched_domains_cpuslocked();
-	mutex_unlock(&cpuset_mutex);
-	put_online_cpus();
+	cpuset_sched_change_end();
 }
 
 /**
@@ -1537,9 +1532,7 @@ static void cpuset_cancel_attach(struct cgroup_taskset *tset)
 	cs = css_cs(css);
 
 	mutex_lock(&cpuset_mutex);
-	cs->attach_in_progress--;
-	if (!cs->attach_in_progress)
-		wake_up(&cpuset_attach_wq);
+	css_cs(css)->attach_in_progress--;
 	mutex_unlock(&cpuset_mutex);
 }
 
@@ -1563,7 +1556,6 @@ static void cpuset_attach(struct cgroup_taskset *tset)
 	cgroup_taskset_first(tset, &css);
 	cs = css_cs(css);
 
-	lockdep_assert_cpus_held();     /* see cgroup_attach_lock() */
 	mutex_lock(&cpuset_mutex);
 
 	/* prepare for attach */
@@ -1650,8 +1642,7 @@ static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
 	cpuset_filetype_t type = cft->private;
 	int retval = 0;
 
-	get_online_cpus();
-	mutex_lock(&cpuset_mutex);
+	cpuset_sched_change_begin();
 	if (!is_cpuset_online(cs)) {
 		retval = -ENODEV;
 		goto out_unlock;
@@ -1693,8 +1684,7 @@ static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
 		break;
 	}
 out_unlock:
-	mutex_unlock(&cpuset_mutex);
-	put_online_cpus();
+	cpuset_sched_change_end();
 	return retval;
 }
 
@@ -1705,8 +1695,7 @@ static int cpuset_write_s64(struct cgroup_subsys_state *css, struct cftype *cft,
 	cpuset_filetype_t type = cft->private;
 	int retval = -ENODEV;
 
-	get_online_cpus();
-	mutex_lock(&cpuset_mutex);
+	cpuset_sched_change_begin();
 	if (!is_cpuset_online(cs))
 		goto out_unlock;
 
@@ -1719,8 +1708,7 @@ static int cpuset_write_s64(struct cgroup_subsys_state *css, struct cftype *cft,
 		break;
 	}
 out_unlock:
-	mutex_unlock(&cpuset_mutex);
-	put_online_cpus();
+	cpuset_sched_change_end();
 	return retval;
 }
 
@@ -1759,8 +1747,7 @@ static ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 	kernfs_break_active_protection(of->kn);
 	flush_work(&cpuset_hotplug_work);
 
-	get_online_cpus();
-	mutex_lock(&cpuset_mutex);
+	cpuset_sched_change_begin();
 	if (!is_cpuset_online(cs))
 		goto out_unlock;
 
@@ -1784,8 +1771,7 @@ static ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 
 	free_trial_cpuset(trialcs);
 out_unlock:
-	mutex_unlock(&cpuset_mutex);
-	put_online_cpus();
+	cpuset_sched_change_end();
 	kernfs_unbreak_active_protection(of->kn);
 	css_put(&cs->css);
 	flush_workqueue(cpuset_migrate_mm_wq);
@@ -2047,7 +2033,6 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	if (!parent)
 		return 0;
 
-	get_online_cpus();
 	mutex_lock(&cpuset_mutex);
 
 	set_bit(CS_ONLINE, &cs->flags);
@@ -2099,7 +2084,6 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	spin_unlock_irq(&callback_lock);
 out_unlock:
 	mutex_unlock(&cpuset_mutex);
-	put_online_cpus();
 	return 0;
 }
 
@@ -2113,8 +2097,7 @@ static void cpuset_css_offline(struct cgroup_subsys_state *css)
 {
 	struct cpuset *cs = css_cs(css);
 
-	get_online_cpus();
-	mutex_lock(&cpuset_mutex);
+	cpuset_sched_change_begin();
 
 	if (is_sched_load_balance(cs))
 		update_flag(CS_SCHED_LOAD_BALANCE, cs, 0);
@@ -2122,8 +2105,7 @@ static void cpuset_css_offline(struct cgroup_subsys_state *css)
 	cpuset_dec();
 	clear_bit(CS_ONLINE, &cs->flags);
 
-	mutex_unlock(&cpuset_mutex);
-	put_online_cpus();
+	cpuset_sched_change_end();
 }
 
 static void cpuset_css_free(struct cgroup_subsys_state *css)
@@ -2473,11 +2455,8 @@ static struct notifier_block cpuset_track_online_nodes_nb = {
  */
 void __init cpuset_init_smp(void)
 {
-	/*
-	 * cpus_allowd/mems_allowed set to v2 values in the initial
-	 * cpuset_bind() call will be reset to v1 values in another
-	 * cpuset_bind() call when v1 cpuset is mounted.
-	 */
+	cpumask_copy(top_cpuset.cpus_allowed, cpu_active_mask);
+	top_cpuset.mems_allowed = node_states[N_MEMORY];
 	top_cpuset.old_mems_allowed = top_cpuset.mems_allowed;
 
 	cpumask_copy(top_cpuset.effective_cpus, cpu_active_mask);
